@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:sfdc="http://www.mulesoft.org/schema/mule/sfdc" xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:tls="http://www.mulesoft.org/schema/mule/tls"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd
+http://www.mulesoft.org/schema/mule/sfdc http://www.mulesoft.org/schema/mule/sfdc/current/mule-sfdc.xsd">
+	<http:listener-config name="HTTP_Listener_Configuration"
+		protocol="HTTPS" host="0.0.0.0" port="${https.port}" doc:name="HTTP Listener Configuration">
+		<tls:context>
+			<tls:key-store type="jks" path="${keystore.path}"
+				alias="${keystore.alias}" keyPassword="${keystore.password}"
+				password="${keystore.password}" />
+		</tls:context>
+	</http:listener-config>
+    
+	<flow name="acceptallFlow">
+		<http:listener config-ref="HTTP_Listener_Configuration"
+			path="/" doc:name="HTTP" />
+		<logger
+			message="Request Received by 'Accept All' with properties: #[message.inboundProperties]"
+			level="INFO" doc:name="Logger" />
+		<set-property propertyName="http.status" value="#[201]"
+			doc:name="Property Http Status" />
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	message : "Accepted the request"
+}]]></dw:set-payload>
+		</dw:transform-message>
+	</flow>
+	<flow name="acceptallFlow1">
+		<http:listener config-ref="HTTP_Listener_Configuration"
+			path="/error" doc:name="HTTP" />
+		<logger
+			message="Request Received by 'Report Error' with properties: #[message.inboundProperties]"
+			level="INFO" doc:name="Logger" />
+		<set-variable variableName="errorCode"
+			value="#[message.inboundProperties.'http.query.params'.errorCode]"
+			mimeType="application/java" doc:name="Get error code" />
+		<set-variable variableName="errorMsg"
+			value="#[message.inboundProperties.'http.query.params'.errorMsg]"
+			mimeType="application/java" doc:name="Get error msg" />
+		<set-property propertyName="http.status"
+			value="#[errorCode == empty ? 500 : errorCode]" doc:name="Property Http Status" />
+		<set-property propertyName="http.reason"
+			value="#[flowVars.errorMsg == empty ? 'Internal Server Error' : flowVars.errorMsg]"
+			doc:name="Property Http Reason" />
+		<dw:transform-message doc:name="Transform Message">
+			<dw:set-payload><![CDATA[%dw 1.0
+%output application/json
+---
+{
+	message : flowVars.errorMsg when flowVars.errorMsg != null otherwise 'Internal Server Error'
+}]]></dw:set-payload>
+		</dw:transform-message>
+	</flow>
+</mule>
